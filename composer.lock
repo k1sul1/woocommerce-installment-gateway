@@ -1,0 +1,58 @@
+{
+    "_readme": [
+        "This file locks the dependencies of your project to a known state",
+        "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
+        "This file is @generated automatically"
+    ],
+    "content-hash": "177bdd2a236a020c3a5312393c569c33",
+    "packages": [
+        {
+            "name": "nxp/math-executor",
+            "version": "v0.2",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/NeonXP/MathExecutor.git",
+                "reference": "3436e0a51ff4c709226178f897e053c0fae8da4c"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/NeonXP/MathExecutor/zipball/3436e0a51ff4c709226178f897e053c0fae8da4c",
+                "reference": "3436e0a51ff4c709226178f897e053c0fae8da4c",
+                "shasum": ""
+            },
+            "type": "library",
+            "autoload": {
+                "psr-0": {
+                    "NXP": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Alexander 'NeonXP' Kiryukhin",
+                    "email": "frei@neonxp.info"
+                }
+            ],
+            "description": "Simple math expressions calculator",
+            "homepage": "http://github.com/NeonXP/MathExecutor",
+            "keywords": [
+                "calculator",
+                "expression",
+                "math",
+                "parser"
+            ],
+            "time": "2017-03-10T12:29:42+00:00"
+        }
+    ],
+    "packages-dev": [],
+    "aliases": [],
+    "minimum-stability": "stable",
+    "stability-flags": [],
+    "prefer-stable": false,
+    "prefer-lowest": false,
+    "platform": [],
+    "platform-dev": []
+}

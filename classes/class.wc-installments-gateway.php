@@ -1,7 +1,7 @@
 <?php
 class WC_Installments_Gateway_k1sul1 extends \WC_Payment_Gateway {
   public function  __construct() {
-    $options = apply_filters("k1sul1-installments-gateway", [
+    $options = apply_filters("k1sul1-wcigw-options", [
       "id" => "installments",
       "icon" => "",
       "has_fields" => true,
@@ -19,6 +19,7 @@ class WC_Installments_Gateway_k1sul1 extends \WC_Payment_Gateway {
     $this->title = $this->get_option("title");
     $this->description = $this->get_option("description");
     $this->instructions = $this->get_option("instructions");
+    $this->direct = $this->get_option("direct");
     $this->identifier = $this->get_option("identifier");
     $this->payment_options = $this->get_option("payment_options");
 
@@ -26,6 +27,62 @@ class WC_Installments_Gateway_k1sul1 extends \WC_Payment_Gateway {
       $this,
       "process_admin_options",
     ]);
+
+    if (!$this->direct) {
+      // add_action("woocommerce_api_wc_installments_gateway_k1sul1", [$this->WC_Installments_Gateway_k1sul1 // wot? docs is gibberish at this point
+      add_action("woocommerce_api_callback", [$this, "callback_handler"]);
+    }
+
+    add_action("woocommerce_thankyou_{$this->id}", [$this, 'thankyou_page']);
+    add_action("woocommerce_email_before_order_table", [$this, "email_instructions"], 10, 3);
+  }
+
+  public function thankyou_page($order_id) {
+    if ($this->instructions) {
+      $order = new WC_Order($order_id);
+      $model = get_post_meta($order_id, "wcigw_payment_model", true);
+      $installment = array_values($this->getInstallmentOptions(null, [$model]))[0]; // Don't ask.
+
+      echo wpautop(join(
+        PHP_EOL,
+        apply_filters("k1sul1-wcigw-thankyou-instructions",
+          [
+            wptexturize($this->instructions),
+            "<h3>" . __("Your payment plan was", "woocommerce") . "</h3>",
+            $this->convertInstallmentPrice(
+              $this->convertFormula($installment["formula"], $order->get_total()),
+              $installment["text"]
+            ),
+          ],
+          $model,
+          $order
+        )
+      ));
+    }
+  }
+
+  public function email_instructions($order, $sent_to_admin, $plain_text = false) {
+    if ($this->instructions && !$sent_to_admin && $order->get_payment_method() === $this->id) {
+      $order_id = $order->get_id();
+      $model = get_post_meta($order_id, "wcigw_payment_model", true);
+      $installment = array_values($this->getInstallmentOptions(null, [$model]))[0]; // Don't ask.
+
+      echo wpautop(join(
+        PHP_EOL,
+        apply_filters("k1sul1-wcigw-email-instructions",
+          [
+            wptexturize($this->instructions),
+            __("Your payment plan was", "woocommerce"),
+            $this->convertInstallmentPrice(
+              $this->convertFormula($installment["formula"], $order->get_total()),
+              $installment["text"]
+            ),
+          ],
+          $model,
+          $order
+        )
+      ));
+    }
   }
 
   public function init_form_fields() {
@@ -35,6 +92,14 @@ class WC_Installments_Gateway_k1sul1 extends \WC_Payment_Gateway {
         "type" => "checkbox",
         "label" => __("Enable installments", "woocommerce"),
         "default" => "yes",
+      ],
+      "direct" => [
+        "title" => __("Use direct payment?", "woocommerce"),
+        "type" => "checkbox",
+        "label" => __("Yes", "woocommerce"),
+        "default" => "yes",
+        "description" => __("If unticked, callback will be used instead.
+        Direct payment requires immediate knowledge on whether the payment is possible.", "woocommerce"),
       ],
       "title" => [
         "title" => __("Title", "woocommerce"),
@@ -82,9 +147,46 @@ class WC_Installments_Gateway_k1sul1 extends \WC_Payment_Gateway {
         "title" => __("Payment options", "woocommerce"),
         "type" => "textarea",
         "description" => __("These options will be listed on checkout and the user may pick whichever suits them best.", "woocommerce"),
-        "default" => "60 : ((%total% + 70) * 1.079 / 60) + 7 : Pay in 60 months, %installment% / month.\n10 : ((%total% + 70) * 1.079 / 10) + 7 : Pay in 10 months, %installment% / month.",
+        "default" => "10 : ((%total% + 70) * 1.079 / 10) + 7 : Pay in 10 months, %installment% / month.",
       ],
     ];
+  }
+
+  public function getInstallmentOptions($key = null, $options = []) {
+    $options = !empty($options) ? $options : explode("\n", $this->payment_options);
+    $rows = [];
+
+    foreach ($options as $row) {
+      $full = $row;
+      $row = explode(":", $row);
+      $parts = trim($row[0]);
+      $formula = $row[1];
+      $text = $row[2];
+
+      $rows[$parts] = compact("parts", "formula", "text", "full");
+
+      if ($key !== null && isset($rows[$key])) {
+        return $rows[$key];
+      }
+    }
+
+    return $rows;
+  }
+
+  public function convertFormula($formula, $price = 0) {
+    return str_replace(
+      ["%total%"],
+      [$price],
+      $formula
+    );
+  }
+
+  public function convertInstallmentPrice($formula, $text = "") {
+    return str_replace(
+      ["%installment%"],
+      [round((new \NXP\MathExecutor())->execute($formula), 2)],
+      $text
+    );
   }
 
   public function payment_fields() {
@@ -95,36 +197,22 @@ class WC_Installments_Gateway_k1sul1 extends \WC_Payment_Gateway {
     </label>
     <select name="selected_payment_model">
     <?php
-    $options = explode("\n", $this->payment_options);
-    $currency = get_woocommerce_currency();
     $price = max(
       0,
       apply_filters(
-        'woocommerce_calculated_total',
-        round(WC()->cart->cart_contents_total + WC()->cart->fee_total + WC()->cart->tax_total, WC()->cart->dp ), WC()->cart
+        "woocommerce_calculated_total",
+        round(WC()->cart->cart_contents_total + WC()->cart->fee_total + WC()->cart->tax_total, WC()->cart->dp ),
+        WC()->cart
       )
     );
 
+    $options = $this->getInstallmentOptions();
     foreach ($options as $row) {
-      $row = explode(":", $row);
-      $parts= $row[0];
-      $formula = $row[1];
-      $text = $row[2];
-
-      $formula = str_replace(
-        ["%total%"],
-        [$price],
-        $formula
-      );
-
-      $text = str_replace(
-        ["%installment%"],
-        [eval("return $formula;")], // validate you fucking idiot
-        $text
-      );
+      $formula = $this->convertFormula($row["formula"], $price);
+      $text = $this->convertInstallmentPrice($formula, $row["text"]);
 
       echo "
-        <option value='$parts'>
+        <option value='$row[parts]'>
           $text
         </option>
       ";
@@ -137,22 +225,82 @@ class WC_Installments_Gateway_k1sul1 extends \WC_Payment_Gateway {
   public function process_payment($order_id) {
     global $woocommerce;
     $order = new WC_Order($order_id);
-    error_log(print_r($_POST, true));
 
-    // Mark as on-hold (we"re awaiting the cheque)
-    // $order->update_status("on-hold", __("Awaiting cheque payment", "woocommerce"));
-    $order->payment_complete();
+    // if the req is legitimate, these *will* be in the req.
+    $selectedModel = $this->getInstallmentOptions($_POST["selected_payment_model"]);
+    $identifier = $_POST["identifier"];
+
+    error_log(print_r($selectedModel, true));
+
+    update_post_meta($order_id, "wcigw_payment_model", $selectedModel["full"]);
+    $order->add_order_note("Selected payment plan was $selectedModel[formula].");
+
+    if ($this->direct) {
+      $reqMethod = apply_filters("k1sul1-wcigw-direct-reqmethod", "wp_remote_post");
+      $options = apply_filters("k1su1-wcigw-direct-reqopts", [
+        "method" => $reqMethod === "wp_remote_post" ? "wp_remote_post" : $reqMethod,
+        "url" => get_home_url(null, "/") . "/wp-json/wcigw/v1/process_payment",
+        "args" => [
+          "timeout" => 30,
+          "body" => [
+            "order_id" => $order_id,
+            "identifier" => $identifier,
+            "model" => $selectedModel,
+          ],
+          "sslverify" => defined("WP_DEBUG") && WP_DEBUG === true ? false : true, // WP_DEBUG is only on in dev.
+        ],
+      ]);
+
+      $response = $options["method"]($options["url"], $options["args"]);
+
+      if (is_wp_error($response)) {
+        $error = $response->get_error_message();
+
+        $order->add_order_note("Direct gateway payment failed. Error: $error");
+        do_action("k1sul1-wcigw-direct-unsuccessful", $response, $order);
+        wc_add_notice(__("Payment error:", "woothemes") . $error, "error");
+        return;
+      }
+
+      if (isset($response["body"])) {
+        $response = $response["body"];
+      }
+      $response = json_decode($response);
+
+      if ($response->status === "success") {
+        $order->add_order_note("Direct gateway payment successful.");
+        $order->payment_complete();
+        $woocommerce->cart->empty_cart();
+      } else {
+        $error = isset($response["error"]) ? $response["error"] : "";
+
+        $order->add_order_note("Direct gateway payment failed. Error: $error");
+        do_action("k1sul1-wcigw-direct-unsuccessful", $response, $order);
+        wc_add_notice(__("Payment error:", "woothemes") . $error, "error");
+        return;
+      }
+    } else {
+      // Callback will be used instead.
+      $order->add_order_note(__("Awaiting financer confirmation.", "woocommerce"));
+      $order->update_status("on-hold", __("Awaiting financer confirmation.", "woocommerce"));
+      $woocommerce->cart->empty_cart();
+    }
 
     // Reduce stock levels
-    $order->reduce_order_stock();
-
-    // Remove cart
-    $woocommerce->cart->empty_cart();
+    // $order->reduce_order_stock();
 
     // Return thankyou redirect
     return [
       "result" => "success",
       "redirect" => $this->get_return_url($order)
     ];
+  }
+
+  public function callback_handler() {
+    $response = apply_filters("k1sul1-wcigw-callback-response", $_POST);
+
+    die("kissa");
+    add_action("k1sul1-wcigw-callback-action", "k1sul1_wcigw_callback_action");
+    do_action("k1sul1-wcigw-callback-action", $response);
   }
 }

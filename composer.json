@@ -1,13 +1,20 @@
 {
-    "name": "k1sul1/woocommerce-installment-gateway",
-    "description": "Woocommerce plugin that adds a new payment gateway meant for paying in parts.",
-    "type": "wordpress-plugin",
-    "license": "GPL-2.0",
-    "authors": [
-        {
-            "name": "Christian Nikkanen",
-            "email": "me@kisu.li"
-        }
-    ],
-    "require": {}
+  "name": "k1sul1/woocommerce-installment-gateway",
+  "description": "Woocommerce plugin that adds a new payment gateway meant for paying in parts.",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0",
+  "authors": [
+    {
+      "name": "Christian Nikkanen",
+      "email": "me@kisu.li"
+    }
+  ],
+  "require": {
+    "nxp/math-executor": "^0.2.0"
+  },
+  "autoload": {
+    "classmap": [
+      "classes/class.wc-installments-gateway.php"
+    ]
+  }
 }
