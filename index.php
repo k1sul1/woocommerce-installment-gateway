@@ -1,6 +1,6 @@
 <?php
 /*
-Plugin name: woocommerce-installment-gateway
+Plugin name: Installment payment gateway for WooCommerce
 Author: k1sul1
 Author Email: me@kisu.li
 */

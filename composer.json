@@ -1,6 +1,6 @@
 {
   "name": "k1sul1/woocommerce-installment-gateway",
-  "description": "Woocommerce plugin that adds a new payment gateway meant for paying in parts.",
+  "description": "WooCommerce plugin that adds a new payment gateway meant for paying in parts.",
   "type": "wordpress-plugin",
   "license": "GPL-2.0",
   "authors": [
