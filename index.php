@@ -1,6 +1,7 @@
 <?php
 /*
 Plugin name: Installment payment gateway for WooCommerce
+Version: 1.0
 Author: k1sul1
 Author Email: me@kisu.li
 */
