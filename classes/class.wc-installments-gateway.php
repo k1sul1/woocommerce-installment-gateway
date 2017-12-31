@@ -29,8 +29,8 @@ class WC_Installments_Gateway_k1sul1 extends \WC_Payment_Gateway {
     ]);
 
     if (!$this->direct) {
-      // add_action("woocommerce_api_wc_installments_gateway_k1sul1", [$this->WC_Installments_Gateway_k1sul1 // wot? docs is gibberish at this point
-      add_action("woocommerce_api_callback", [$this, "callback_handler"]);
+      // The callback doen't work when registered here. Registered globally.
+      // add_action("woocommerce_api_callback", [$this, "callback_handler"]);
     }
 
     add_action("woocommerce_thankyou_{$this->id}", [$this, 'thankyou_page']);
@@ -125,24 +125,6 @@ class WC_Installments_Gateway_k1sul1 extends \WC_Payment_Gateway {
         "description" => __("Identifier can be a social security number or company number.", "woocommerce"),
         "default" => "Identifier",
       ],
-      /* "interest" => [
-        "title" => __("Interest", "woocommerce"),
-        "type" => "text",
-        "description" => __("Interest in percentage.", "woocommerce"),
-        "default" => 7.9,
-      ],
-      "billing_fee" => [
-        "title" => __("Billing fee", "woocommerce"),
-        "type" => "text",
-        "description" => __("Monthly billing fee, without a currency.", "woocommerce"),
-        "default" => 7,
-      ],
-      "start_fee" => [
-        "title" => __("Start fee", "woocommerce"),
-        "type" => "text",
-        "description" => __("Fee paid initially.", "woocommerce"),
-        "default" => 70,
-      ], */
       "payment_options" => [
         "title" => __("Payment options", "woocommerce"),
         "type" => "textarea",
@@ -193,7 +175,7 @@ class WC_Installments_Gateway_k1sul1 extends \WC_Payment_Gateway {
     echo wpautop($this->get_description()); ?>
     <label>
       <?=$this->identifier?>
-      <input type="text" name="identifier">
+      <input type="text" name="identifier" required>
     </label>
     <select name="selected_payment_model">
     <?php
@@ -230,12 +212,23 @@ class WC_Installments_Gateway_k1sul1 extends \WC_Payment_Gateway {
     $selectedModel = $this->getInstallmentOptions($_POST["selected_payment_model"]);
     $identifier = $_POST["identifier"];
 
-    error_log(print_r($selectedModel, true));
+    // Feel free to customize the condition.
+    // You could limit purchases over 10 000$ for company identifiers only.
+    $condition =  apply_filters("k1sul1-wcigw-identifier-condition", false, $identifier, $order);
+
+    if (empty($identifier) || $condition) {
+      $error = apply_filters("k1sul1-wcigw-identifier-error", __("Identifier is a mandatory field.", "woocommerce"));
+      $error = " " . $error;
+      wc_add_notice(__("Payment error:", "woothemes") . $error, "error");
+      return;
+    }
 
     update_post_meta($order_id, "wcigw_payment_model", $selectedModel["full"]);
+    $order->add_order_note("Identifier provided was $identifier.");
     $order->add_order_note("Selected payment plan was $selectedModel[formula].");
 
-    if ($this->direct) {
+
+    if ($this->direct === 'yes') { // my brain melts when I look at this
       $reqMethod = apply_filters("k1sul1-wcigw-direct-reqmethod", "wp_remote_post");
       $options = apply_filters("k1su1-wcigw-direct-reqopts", [
         "method" => $reqMethod === "wp_remote_post" ? "wp_remote_post" : $reqMethod,
@@ -271,6 +264,12 @@ class WC_Installments_Gateway_k1sul1 extends \WC_Payment_Gateway {
         $order->add_order_note("Direct gateway payment successful.");
         $order->payment_complete();
         $woocommerce->cart->empty_cart();
+
+        if (function_exists("wc_reduce_order")) {
+          wc_reduce_stock_levels($order->get_id());
+        } else {
+          $order->reduce_order_stock();
+        }
       } else {
         $error = isset($response["error"]) ? $response["error"] : "";
 
@@ -284,23 +283,16 @@ class WC_Installments_Gateway_k1sul1 extends \WC_Payment_Gateway {
       $order->add_order_note(__("Awaiting financer confirmation.", "woocommerce"));
       $order->update_status("on-hold", __("Awaiting financer confirmation.", "woocommerce"));
       $woocommerce->cart->empty_cart();
+
+      do_action("k1sul1-wcigw-callback", $order);
     }
 
     // Reduce stock levels
-    // $order->reduce_order_stock();
 
     // Return thankyou redirect
     return [
       "result" => "success",
       "redirect" => $this->get_return_url($order)
     ];
-  }
-
-  public function callback_handler() {
-    $response = apply_filters("k1sul1-wcigw-callback-response", $_POST);
-
-    die("kissa");
-    add_action("k1sul1-wcigw-callback-action", "k1sul1_wcigw_callback_action");
-    do_action("k1sul1-wcigw-callback-action", $response);
   }
 }
