@@ -28,9 +28,11 @@ add_action("plugins_loaded", function() {
       "methods" => "POST",
       "callback" => function($response) {
         $order_id = isset($_POST["order_id"]) ? $_POST["order_id"] : null;
+        $order_key = isset($response["order_key"]) ? $response["order_key"] : null;
         $identifier = isset($_POST["identifier"]) ? $_POST["identifier"] : null;
 
-        if ($order_id && $identifier) {
+        $order = wc_get_order($order_id);
+        if ($order && $identifier && $order->get_order_key() === $order_key) {
           return [
             "status" => "success",
           ];

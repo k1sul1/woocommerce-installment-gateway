@@ -224,6 +224,7 @@ class WC_Installments_Gateway_k1sul1 extends \WC_Payment_Gateway {
     }
 
     update_post_meta($order_id, "wcigw_payment_model", $selectedModel["full"]);
+    update_post_meta($order_id, "wcigw_identifier", $identifier);
     $order->add_order_note("Identifier provided was $identifier.");
     $order->add_order_note("Selected payment plan was $selectedModel[formula].");
 
@@ -237,6 +238,7 @@ class WC_Installments_Gateway_k1sul1 extends \WC_Payment_Gateway {
           "timeout" => 30,
           "body" => [
             "order_id" => $order_id,
+            "order_key" => $order->get_order_key(),
             "identifier" => $identifier,
             "model" => $selectedModel,
           ],
@@ -287,9 +289,6 @@ class WC_Installments_Gateway_k1sul1 extends \WC_Payment_Gateway {
       do_action("k1sul1-wcigw-callback", $order);
     }
 
-    // Reduce stock levels
-
-    // Return thankyou redirect
     return [
       "result" => "success",
       "redirect" => $this->get_return_url($order)
